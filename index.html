@@ -69,13 +69,16 @@
 
         let isListening = false;
         let recognition;
+        
+        // --- KEY CHANGE 1: State variable to hold the final transcript ---
+        let finalTranscript = '';
 
         // Check for browser support
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
-            recognition.continuous = true; // Keep listening even after a pause
-            recognition.interimResults = true; // Show results as they are captured
+            recognition.continuous = true; 
+            recognition.interimResults = true;
             recognition.lang = 'en-US';
 
             recognition.onstart = () => {
@@ -93,23 +96,25 @@
                 statusDiv.innerText = `Error: ${event.error}. Please try again.`;
             };
 
+            // --- KEY CHANGE 3: Modified logic to append text ---
             recognition.onresult = (event) => {
                 let interimTranscript = '';
-                let finalTranscript = '';
+                // Loop through results from the current session
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    const transcript = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript;
+                        // Once a result is final, add it to our global final transcript
+                        finalTranscript += transcript + ' ';
                     } else {
-                        interimTranscript += event.results[i][0].transcript;
+                        // Otherwise, it's an interim result
+                        interimTranscript += transcript;
                     }
                 }
-                // We show the final transcript from the beginning of the div,
-                // and the interim transcript at the end with a different color.
-                transcriptionDiv.innerHTML = `${finalTranscript}<span class="text-gray-500">${interimTranscript}</span>`;
+                // Update the display with the cumulative final transcript and the current interim one
+                transcriptionDiv.innerHTML = finalTranscript + `<span class="text-gray-500">${interimTranscript}</span>`;
             };
 
         } else {
-            // Handle browsers that don't support the API
             statusDiv.innerText = "Sorry, your browser doesn't support the Web Speech API. Try Chrome or Edge.";
             recordButton.disabled = true;
         }
@@ -118,27 +123,28 @@
             if (isListening) {
                 recognition.stop();
             } else {
-                // Clear previous transcription
-                transcriptionDiv.innerHTML = '';
+                // --- KEY CHANGE 2: REMOVED line that cleared the transcription div ---
                 recognition.start();
             }
         });
         
         copyButton.addEventListener('click', () => {
             const textToCopy = transcriptionDiv.innerText;
-            const textArea = document.createElement('textarea');
-            textArea.value = textToCopy;
-            document.body.appendChild(textArea);
-            textArea.select();
-            try {
-                document.execCommand('copy');
-                copyButton.innerText = 'Copied!';
-                setTimeout(() => copyButton.innerText = 'Copy Text', 2000);
-            } catch (err) {
-                console.error('Failed to copy text: ', err);
-                copyButton.innerText = 'Failed to copy';
+            if (textToCopy) {
+                const textArea = document.createElement('textarea');
+                textArea.value = textToCopy;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    copyButton.innerText = 'Copied!';
+                    setTimeout(() => copyButton.innerText = 'Copy Text', 2000);
+                } catch (err) {
+                    console.error('Failed to copy text: ', err);
+                    copyButton.innerText = 'Failed to copy';
+                }
+                document.body.removeChild(textArea);
             }
-            document.body.removeChild(textArea);
         });
 
         function updateUIListening() {
