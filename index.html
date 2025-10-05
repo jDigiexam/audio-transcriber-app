@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Transcriber (Web Speech API)</title>
+    <title>Audio Transcriber (Hugging Face)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,7 +12,7 @@
         body {
             font-family: 'Inter', sans-serif;
         }
-        .listening-indicator {
+        .recording-indicator {
             width: 12px;
             height: 12px;
             background-color: #ef4444; /* red-500 */
@@ -23,6 +23,18 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.3; }
         }
+        .loader {
+            border: 4px solid #f3f4f6; /* gray-100 */
+            border-top: 4px solid #3b82f6; /* blue-500 */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 flex items-center justify-center min-h-screen">
@@ -30,34 +42,28 @@
     <div class="bg-white rounded-xl shadow-lg p-6 sm:p-8 w-full max-w-2xl mx-4">
         <header class="text-center mb-6">
             <h1 class="text-3xl font-bold text-gray-900">Audio Transcriber</h1>
-            <p class="text-gray-500 mt-1">Uses your browser's built-in speech recognition.</p>
-            <p class="text-sm text-gray-400 mt-2">Try saying "period", "comma", or "question mark".</p>
+            <p class="text-gray-500 mt-1">Powered by Hugging Face & Supabase</p>
         </header>
 
         <main>
             <div class="flex flex-col items-center justify-center space-y-6">
-                <!-- Record Button -->
-                <button id="recordButton" class="group bg-blue-600 hover:bg-blue-700 text-white rounded-full p-5 transition-all duration-300 ease-in-out shadow-md focus:outline-none focus:ring-4 focus:ring-blue-300">
+                <button id="recordButton" class="group bg-blue-600 hover:bg-blue-700 text-white rounded-full p-5 transition-all duration-300 ease-in-out shadow-md focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:bg-gray-400 disabled:cursor-not-allowed">
                     <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-transform duration-300 group-hover:scale-110"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
                     <svg id="stopIcon" xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="currentColor" class="hidden"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
                 </button>
-                
-                <!-- Status Display -->
                 <div id="status" class="h-6 text-gray-600 text-center transition-opacity duration-300">
-                    Click the microphone to start transcribing
+                    Click the microphone to start recording
                 </div>
             </div>
 
-            <!-- Transcription Output -->
             <div id="resultContainer" class="mt-8">
                 <h2 class="text-lg font-semibold text-gray-700 mb-2">Transcription:</h2>
                 <div id="transcription" class="w-full bg-gray-100 p-4 rounded-lg min-h-[150px] border border-gray-200 whitespace-pre-wrap"></div>
-                 <button id="copyButton" class="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors duration-200">
+                <button id="copyButton" class="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors duration-200">
                     Copy Text
                 </button>
             </div>
         </main>
-
     </div>
 
     <script>
@@ -68,112 +74,127 @@
         const stopIcon = document.getElementById('stopIcon');
         const copyButton = document.getElementById('copyButton');
 
-        let isListening = false;
-        let recognition;
-        let finalTranscript = '';
+        // --- IMPORTANT: REPLACE WITH YOUR SUPABASE FUNCTION URL ---
+        const SUPABASE_FUNCTION_URL = 'YOUR_SUPABASE_FUNCTION_URL';
 
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (SpeechRecognition) {
-            recognition = new SpeechRecognition();
-            recognition.continuous = true; 
-            recognition.interimResults = true;
-            recognition.lang = 'en-US';
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
 
-            recognition.onstart = () => {
-                isListening = true;
-                updateUIListening();
-            };
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
 
-            recognition.onend = () => {
-                isListening = false;
-                updateUIIdle();
-            };
+                mediaRecorder.onstart = () => {
+                    audioChunks = [];
+                    isRecording = true;
+                    updateUIRecording();
+                };
 
-            recognition.onerror = (event) => {
-                console.error("Speech recognition error:", event.error);
-                statusDiv.innerText = `Error: ${event.error}. Please try again.`;
-            };
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
 
-            recognition.onresult = (event) => {
-                let interimTranscript = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    const transcript = event.results[i][0].transcript;
-                    if (event.results[i].isFinal) {
-                        finalTranscript += processTranscript(transcript);
-                    } else {
-                        interimTranscript += transcript;
-                    }
+                mediaRecorder.onstop = () => {
+                    isRecording = false;
+                    updateUITranscribing();
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    transcribeAudio(audioBlob);
+                    // Stop the microphone track
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+            } catch (error) {
+                console.error("Error accessing microphone:", error);
+                statusDiv.innerText = "Error: Could not access microphone.";
+                recordButton.disabled = false;
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+        }
+
+        async function transcribeAudio(audioBlob) {
+            try {
+                if (!SUPABASE_FUNCTION_URL.startsWith('http')) {
+                    throw new Error("Supabase function URL is not configured.");
                 }
-                transcriptionDiv.innerHTML = capitalizeSentences(finalTranscript) + `<span class="text-gray-500">${interimTranscript}</span>`;
-            };
 
-        } else {
-            statusDiv.innerText = "Sorry, your browser doesn't support the Web Speech API. Try Chrome or Edge.";
-            recordButton.disabled = true;
-        }
-        
-        // --- NEW FUNCTION: Process raw transcript for punctuation commands ---
-        function processTranscript(transcript) {
-            // Use regular expressions to replace spoken punctuation with symbols.
-            // The 'gi' flags mean global (replace all) and case-insensitive.
-            // The space before the word helps prevent replacing parts of other words.
-            return transcript
-                .replace(/\speriod/gi, '.')
-                .replace(/\scomma/gi, ',')
-                .replace(/\squestion mark/gi, '?')
-                .replace(/\sexclamation point/gi, '!')
-                + ' '; // Add a space for proper sentence separation
-        }
-        
-        // --- NEW FUNCTION: Capitalize the first letter of sentences ---
-        function capitalizeSentences(text) {
-            // This regex finds the first letter after a sentence-ending punctuation mark
-            // followed by a space, and capitalizes it.
-            return text.replace(/(^\w|[\.\?\!]\s+\w)/g, letter => letter.toUpperCase());
+                const response = await fetch(SUPABASE_FUNCTION_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'audio/webm' },
+                    body: audioBlob
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Server error: ${response.status} - ${errorText}`);
+                }
+
+                const data = await response.json();
+                transcriptionDiv.innerText += data.text + ' ';
+            } catch (error) {
+                console.error("Error during transcription:", error);
+                transcriptionDiv.innerText += `\n[Error: ${error.message}]`;
+            } finally {
+                updateUIIdle();
+            }
         }
 
         recordButton.addEventListener('click', () => {
-            if (isListening) {
-                recognition.stop();
+            if (isRecording) {
+                stopRecording();
             } else {
-                recognition.start();
-            }
-        });
-        
-        copyButton.addEventListener('click', () => {
-            const textToCopy = transcriptionDiv.innerText;
-            if (textToCopy) {
-                const textArea = document.createElement('textarea');
-                textArea.value = textToCopy;
-                document.body.appendChild(textArea);
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                    copyButton.innerText = 'Copied!';
-                    setTimeout(() => copyButton.innerText = 'Copy Text', 2000);
-                } catch (err) {
-                    console.error('Failed to copy text: ', err);
-                    copyButton.innerText = 'Failed to copy';
-                }
-                document.body.removeChild(textArea);
+                startRecording();
             }
         });
 
-        function updateUIListening() {
+        copyButton.addEventListener('click', () => {
+            const textToCopy = transcriptionDiv.innerText;
+            if (textToCopy) {
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    copyButton.innerText = 'Copied!';
+                    setTimeout(() => copyButton.innerText = 'Copy Text', 2000);
+                }).catch(err => {
+                    console.error('Failed to copy text: ', err);
+                });
+            }
+        });
+        
+        // UI Update Functions
+        function updateUIRecording() {
             micIcon.classList.add('hidden');
             stopIcon.classList.remove('hidden');
             recordButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
             recordButton.classList.add('bg-red-600', 'hover:bg-red-700');
-            statusDiv.innerHTML = '<div class="flex items-center space-x-2 justify-center"><div class="listening-indicator"></div><span>Listening... Click to stop.</span></div>';
+            statusDiv.innerHTML = '<div class="flex items-center space-x-2 justify-center"><div class="recording-indicator"></div><span>Recording... Click to stop.</span></div>';
+        }
+
+        function updateUITranscribing() {
+            recordButton.disabled = true;
+            statusDiv.innerHTML = '<div class="flex items-center space-x-2 justify-center"><div class="loader"></div><span>Transcribing...</span></div>';
         }
         
         function updateUIIdle() {
             stopIcon.classList.add('hidden');
             micIcon.classList.remove('hidden');
+            recordButton.disabled = false;
             recordButton.classList.remove('bg-red-600', 'hover:bg-red-700');
             recordButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
-            statusDiv.innerText = "Click the microphone to start transcribing";
+            statusDiv.innerText = "Click the microphone to start recording";
         }
+
+        // Initial check
+        if (!SUPABASE_FUNCTION_URL || !SUPABASE_FUNCTION_URL.startsWith('http')) {
+            statusDiv.innerText = "Configuration needed: Please set your Supabase URL in the code.";
+            recordButton.disabled = true;
+        }
+
     </script>
 
 </body>
