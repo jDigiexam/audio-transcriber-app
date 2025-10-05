@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Transcriber</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .recording-indicator {
+            width: 12px;
+            height: 12px;
+            background-color: #ef4444; /* red-500 */
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 flex items-center justify-center min-h-screen">
+
+    <div class="bg-white rounded-xl shadow-lg p-6 sm:p-8 w-full max-w-2xl mx-4">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-900">Audio Transcriber</h1>
+            <p class="text-gray-500 mt-1">Record your voice and get a text transcription.</p>
+        </header>
+
+        <main>
+            <div class="flex flex-col items-center justify-center space-y-6">
+                <!-- Record Button -->
+                <button id="recordButton" class="group bg-blue-600 hover:bg-blue-700 text-white rounded-full p-5 transition-all duration-300 ease-in-out shadow-md focus:outline-none focus:ring-4 focus:ring-blue-300">
+                    <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-transform duration-300 group-hover:scale-110"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                    <svg id="stopIcon" xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="currentColor" class="hidden"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+                </button>
+                
+                <!-- Status Display -->
+                <div id="status" class="h-6 text-gray-600 text-center transition-opacity duration-300">
+                    Click the microphone to start recording
+                </div>
+            </div>
+
+            <!-- Transcription Output -->
+            <div id="resultContainer" class="mt-8 hidden">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">Transcription:</h2>
+                <div id="transcription" class="w-full bg-gray-100 p-4 rounded-lg min-h-[100px] border border-gray-200 whitespace-pre-wrap"></div>
+                 <button id="copyButton" class="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors duration-200">
+                    Copy Text
+                </button>
+            </div>
+        </main>
+
+    </div>
+
+    <script>
+        // IMPORTANT: Replace this with your actual Supabase Edge Function URL
+        const SUPABASE_FUNCTION_URL = 'YOUR_SUPABASE_FUNCTION_URL_HERE/transcribe';
+
+        const recordButton = document.getElementById('recordButton');
+        const statusDiv = document.getElementById('status');
+        const transcriptionDiv = document.getElementById('transcription');
+        const resultContainer = document.getElementById('resultContainer');
+        const micIcon = document.getElementById('micIcon');
+        const stopIcon = document.getElementById('stopIcon');
+        const copyButton = document.getElementById('copyButton');
+
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        recordButton.addEventListener('click', async () => {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                await startRecording();
+            }
+        });
+        
+        copyButton.addEventListener('click', () => {
+            const textToCopy = transcriptionDiv.innerText;
+            // Using a temporary textarea element to copy text
+            const textArea = document.createElement('textarea');
+            textArea.value = textToCopy;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                copyButton.innerText = 'Copied!';
+                setTimeout(() => copyButton.innerText = 'Copy Text', 2000);
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+                copyButton.innerText = 'Failed to copy';
+            }
+            document.body.removeChild(textArea);
+        });
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    audioChunks = [];
+                    transcribeAudio(audioBlob);
+                    
+                    // Stop all audio tracks to turn off the browser's recording indicator
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+                audioChunks = [];
+                mediaRecorder.start();
+                isRecording = true;
+                updateUIRecording();
+
+            } catch (error) {
+                console.error("Error accessing microphone:", error);
+                statusDiv.innerText = "Error: Could not access microphone. Please grant permission.";
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                isRecording = false;
+                updateUIProcessing();
+            }
+        }
+
+        function updateUIRecording() {
+            micIcon.classList.add('hidden');
+            stopIcon.classList.remove('hidden');
+            recordButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            recordButton.classList.add('bg-red-600', 'hover:bg-red-700');
+            statusDiv.innerHTML = '<div class="flex items-center space-x-2 justify-center"><div class="recording-indicator"></div><span>Recording... Click to stop.</span></div>';
+            resultContainer.classList.add('hidden');
+        }
+
+        function updateUIProcessing() {
+            stopIcon.classList.add('hidden');
+            micIcon.classList.remove('hidden');
+            recordButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+            recordButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            statusDiv.innerHTML = '<div class="flex items-center space-x-2 justify-center"><svg class="animate-spin h-5 w-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Processing audio...</span></div>';
+        }
+        
+        function updateUIIdle() {
+            statusDiv.innerText = "Click the microphone to start recording";
+        }
+
+        async function transcribeAudio(audioBlob) {
+             if (SUPABASE_FUNCTION_URL.includes('YOUR_SUPABASE_FUNCTION_URL_HERE')) {
+                console.error('Please update the SUPABASE_FUNCTION_URL in your index.html');
+                statusDiv.innerText = "Error: Backend URL not configured.";
+                transcriptionDiv.innerText = "Please follow the README to set up your Supabase function and update the URL in the HTML file.";
+                resultContainer.classList.remove('hidden');
+                return;
+            }
+
+            const formData = new FormData();
+            // The backend expects the file to be named 'audio'.
+            formData.append('audio', audioBlob, 'recording.webm');
+
+            try {
+                const response = await fetch(SUPABASE_FUNCTION_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorText}`);
+                }
+
+                const result = await response.json();
+                
+                transcriptionDiv.innerText = result.transcription || "Could not transcribe audio. Please try again.";
+                resultContainer.classList.remove('hidden');
+                updateUIIdle();
+
+            } catch (error) {
+                console.error("Error during transcription:", error);
+                statusDiv.innerText = "An error occurred. Please check the console.";
+                transcriptionDiv.innerText = `Error: ${error.message}`;
+                resultContainer.classList.remove('hidden');
+            }
+        }
+    </script>
+
+</body>
+</html>
