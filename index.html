@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Transcriber (PoC)</title>
+    <title>Audio Transcriber (PoC DX)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,6 +35,10 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        /* Style for the textarea to make it look like the previous div */
+        textarea {
+            resize: vertical; /* Allow vertical resizing */
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 flex items-center justify-center min-h-screen">
@@ -42,7 +46,7 @@
     <div class="bg-white rounded-xl shadow-lg p-6 sm:p-8 w-full max-w-2xl mx-4">
         <header class="text-center mb-6">
             <h1 class="text-3xl font-bold text-gray-900">Audio Transcriber</h1>
-            <p class="text-gray-500 mt-1">A simple speech to text tool</p>
+            <p class="text-gray-500 mt-1">Powered by Digiexam</p>
         </header>
 
         <main>
@@ -58,7 +62,8 @@
 
             <div id="resultContainer" class="mt-8">
                 <h2 class="text-lg font-semibold text-gray-700 mb-2">Transcription:</h2>
-                <div id="transcription" class="w-full bg-gray-100 p-4 rounded-lg min-h-[150px] border border-gray-200 whitespace-pre-wrap"></div>
+                <!-- MODIFIED: Changed div to textarea for editing -->
+                <textarea id="transcription" class="w-full bg-gray-100 p-4 rounded-lg min-h-[150px] border border-gray-200 focus:ring-2 focus:ring-blue-400 focus:outline-none transition"></textarea>
                 <button id="copyButton" class="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors duration-200">
                     Copy Text
                 </button>
@@ -69,13 +74,13 @@
     <script>
         const recordButton = document.getElementById('recordButton');
         const statusDiv = document.getElementById('status');
-        const transcriptionDiv = document.getElementById('transcription');
+        // MODIFIED: This is now a textarea element
+        const transcriptionTextarea = document.getElementById('transcription');
         const micIcon = document.getElementById('micIcon');
         const stopIcon = document.getElementById('stopIcon');
         const copyButton = document.getElementById('copyButton');
-
-        // --- IMPORTANT: REPLACE WITH YOUR SUPABASE FUNCTION URL ---
-        const SUPABASE_FUNCTION_URL = 'https://botaimuuemvprxllnlfp.supabase.co/functions/v1/transcribe';
+        
+        const SUPABASE_FUNCTION_URL = 'YOUR_SUPABASE_FUNCTION_URL';
 
         let mediaRecorder;
         let audioChunks = [];
@@ -101,7 +106,6 @@
                     updateUITranscribing();
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     transcribeAudio(audioBlob);
-                    // Stop the microphone track
                     stream.getTracks().forEach(track => track.stop());
                 };
 
@@ -137,10 +141,13 @@
                 }
 
                 const data = await response.json();
-                transcriptionDiv.innerText += data.text + ' ';
+                // MODIFIED: Use .value for textarea and ensure a space is added correctly
+                const currentText = transcriptionTextarea.value;
+                transcriptionTextarea.value = (currentText.trim() + ' ' + data.text).trim();
+
             } catch (error) {
                 console.error("Error during transcription:", error);
-                transcriptionDiv.innerText += `\n[Error: ${error.message}]`;
+                transcriptionTextarea.value += `\n[Error: ${error.message}]`;
             } finally {
                 updateUIIdle();
             }
@@ -155,7 +162,8 @@
         });
 
         copyButton.addEventListener('click', () => {
-            const textToCopy = transcriptionDiv.innerText;
+            // MODIFIED: Get text from textarea's .value property
+            const textToCopy = transcriptionTextarea.value;
             if (textToCopy) {
                 navigator.clipboard.writeText(textToCopy).then(() => {
                     copyButton.innerText = 'Copied!';
@@ -166,7 +174,6 @@
             }
         });
         
-        // UI Update Functions
         function updateUIRecording() {
             micIcon.classList.add('hidden');
             stopIcon.classList.remove('hidden');
@@ -189,7 +196,6 @@
             statusDiv.innerText = "Click the microphone to start recording";
         }
 
-        // Initial check
         if (!SUPABASE_FUNCTION_URL || !SUPABASE_FUNCTION_URL.startsWith('http')) {
             statusDiv.innerText = "Configuration needed: Please set your Supabase URL in the code.";
             recordButton.disabled = true;
