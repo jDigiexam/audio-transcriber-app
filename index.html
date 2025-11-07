@@ -9,98 +9,94 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-        .recording-indicator {
-            width: 12px;
-            height: 12px;
-            background-color: #ef4444; /* red-500 */
-            border-radius: 50%;
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-        .loader {
-            border: 4px solid #f3f4f6; /* gray-100 */
-            border-top: 4px solid #3b82f6; /* blue-500 */
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        /* Style for the textarea to make it look like the previous div */
-        textarea {
-            resize: vertical; /* Allow vertical resizing */
-        }
+        body { font-family: 'Inter', sans-serif; }
+        .recording-indicator { width: 12px; height: 12px; background-color: #ef4444; border-radius: 50%; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .loader { border: 4px solid #f3f4f6; border-top: 4px solid #3b82f6; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        textarea { resize: vertical; }
+        .hidden { display: none; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 flex items-center justify-center min-h-screen">
 
     <div class="bg-white rounded-xl shadow-lg p-6 sm:p-8 w-full max-w-2xl mx-4">
-        <header class="text-center mb-6">
-            <h1 class="text-3xl font-bold text-gray-900">Audio Transcriber</h1>
-            <p class="text-gray-500 mt-1">Powered by Digiexam</p>
-        </header>
+        
+        <div id="appContainer">
+            <header class="text-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-900">Audio Transcriber</h1>
+                <p class="text-gray-500 mt-1">Powered by Digiexam</p>
+            </header>
 
-        <main>
-            <div class="flex flex-col items-center justify-center space-y-6">
-                <button id="recordButton" class="group bg-blue-600 hover:bg-blue-700 text-white rounded-full p-5 transition-all duration-300 ease-in-out shadow-md focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                    <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-transform duration-300 group-hover:scale-110"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
-                    <svg id="stopIcon" xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="currentColor" class="hidden"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
-                </button>
-                <div id="status" class="h-6 text-gray-600 text-center transition-opacity duration-300">
-                    Click the microphone to start recording
+            <main>
+                <div class="flex flex-col items-center justify-center space-y-6">
+                    <!-- MODIFIED: Added 'disabled' attribute to prevent race condition -->
+                    <button id="recordButton" class="group bg-blue-600 hover:bg-blue-700 text-white rounded-full p-5 transition-all duration-300 ease-in-out shadow-md focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                        <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-transform duration-300 group-hover:scale-110"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                        <svg id="stopIcon" xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="currentColor" class="hidden"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+                    </button>
+                    <div id="status" class="h-6 text-gray-600 text-center transition-opacity duration-300">
+                        Click the microphone to start recording
+                    </div>
                 </div>
-            </div>
 
-            <div id="resultContainer" class="mt-8">
-                <h2 class="text-lg font-semibold text-gray-700 mb-2">Transcription:</h2>
-                <!-- MODIFIED: Changed div to textarea for editing -->
-                <textarea id="transcription" class="w-full bg-gray-100 p-4 rounded-lg min-h-[150px] border border-gray-200 focus:ring-2 focus:ring-blue-400 focus:outline-none transition"></textarea>
-                <button id="copyButton" class="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors duration-200">
-                    Copy Text
-                </button>
-            </div>
-        </main>
+                <div id="resultContainer" class="mt-8">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-2">Transcription:</h2>
+                    <textarea id="transcription" class="w-full bg-gray-100 p-4 rounded-lg min-h-[150px] border border-gray-200 focus:ring-2 focus:ring-blue-400 focus:outline-none transition"></textarea>
+                    <button id="copyButton" class="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors duration-200">
+                        Copy Text
+                    </button>
+                </div>
+            </main>
+        </div>
+
     </div>
 
     <script>
+        // --- CONFIG ---
+        const SUPABASE_FUNCTION_URL = 'https://botaimuuemvprxllnlfp.supabase.co/functions/v1/transcribe';
+
+        // --- UI ELEMENTS ---
         const recordButton = document.getElementById('recordButton');
         const statusDiv = document.getElementById('status');
-        // MODIFIED: This is now a textarea element
         const transcriptionTextarea = document.getElementById('transcription');
         const micIcon = document.getElementById('micIcon');
         const stopIcon = document.getElementById('stopIcon');
         const copyButton = document.getElementById('copyButton');
         
-        const SUPABASE_FUNCTION_URL = 'https://botaimuuemvprxllnlfp.supabase.co/functions/v1/transcribe';
-
         let mediaRecorder;
         let audioChunks = [];
         let isRecording = false;
+        let userId = null;
 
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            userId = urlParams.get('userId');
+
+            // MODIFIED: Trim userId and check for empty string
+            if (!userId || userId.trim() === '') {
+                statusDiv.textContent = 'Error: No user ID provided in URL.';
+                statusDiv.classList.add('text-red-600');
+                recordButton.disabled = true; // Keep it disabled
+            } else {
+                userId = userId.trim(); // Store the clean, trimmed ID
+                recordButton.disabled = false; // Enable the button
+                statusDiv.innerText = "Click the microphone to start recording"; // Set ready status
+            }
+        });
+
+        // --- RECORDER LOGIC ---
         async function startRecording() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 mediaRecorder = new MediaRecorder(stream);
-
                 mediaRecorder.onstart = () => {
                     audioChunks = [];
                     isRecording = true;
                     updateUIRecording();
                 };
-
-                mediaRecorder.ondataavailable = event => {
-                    audioChunks.push(event.data);
-                };
-
+                mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
                 mediaRecorder.onstop = () => {
                     isRecording = false;
                     updateUITranscribing();
@@ -108,30 +104,31 @@
                     transcribeAudio(audioBlob);
                     stream.getTracks().forEach(track => track.stop());
                 };
-
                 mediaRecorder.start();
             } catch (error) {
                 console.error("Error accessing microphone:", error);
                 statusDiv.innerText = "Error: Could not access microphone.";
-                recordButton.disabled = false;
             }
         }
 
         function stopRecording() {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
         }
 
         async function transcribeAudio(audioBlob) {
+            // This check is now mostly for safety, as the button should be disabled if userId is missing.
+            if (!userId) {
+                transcriptionTextarea.value += '\n[Error: Cannot transcribe without a user ID.]';
+                updateUIIdle();
+                return;
+            }
             try {
-                if (!SUPABASE_FUNCTION_URL.startsWith('http')) {
-                    throw new Error("Supabase function URL is not configured.");
-                }
-
                 const response = await fetch(SUPABASE_FUNCTION_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'audio/webm' },
+                    headers: { 
+                        'Content-Type': 'audio/webm',
+                        'X-User-Id': userId // Pass the user ID in a custom header
+                    },
                     body: audioBlob
                 });
                 
@@ -141,7 +138,6 @@
                 }
 
                 const data = await response.json();
-                // MODIFIED: Use .value for textarea and ensure a space is added correctly
                 const currentText = transcriptionTextarea.value;
                 transcriptionTextarea.value = (currentText.trim() + ' ' + data.text).trim();
 
@@ -153,33 +149,23 @@
             }
         }
 
-        recordButton.addEventListener('click', () => {
-            if (isRecording) {
-                stopRecording();
-            } else {
-                startRecording();
-            }
-        });
-
+        recordButton.addEventListener('click', () => isRecording ? stopRecording() : startRecording());
         copyButton.addEventListener('click', () => {
-            // MODIFIED: Get text from textarea's .value property
-            const textToCopy = transcriptionTextarea.value;
-            if (textToCopy) {
-                navigator.clipboard.writeText(textToCopy).then(() => {
+            if (transcriptionTextarea.value) {
+                navigator.clipboard.writeText(transcriptionTextarea.value).then(() => {
                     copyButton.innerText = 'Copied!';
                     setTimeout(() => copyButton.innerText = 'Copy Text', 2000);
-                }).catch(err => {
-                    console.error('Failed to copy text: ', err);
                 });
             }
         });
         
+        // --- UI UPDATERS ---
         function updateUIRecording() {
             micIcon.classList.add('hidden');
             stopIcon.classList.remove('hidden');
-            recordButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-            recordButton.classList.add('bg-red-600', 'hover:bg-red-700');
-            statusDiv.innerHTML = '<div class="flex items-center space-x-2 justify-center"><div class="recording-indicator"></div><span>Recording... Click to stop.</span></div>';
+            recordButton.classList.replace('bg-blue-600', 'bg-red-600');
+            recordButton.classList.replace('hover:bg-blue-700', 'hover:bg-red-700');
+            statusDiv.innerHTML = '<div class="flex items-center space-x-2 justify-center"><div class="recording-indicator"></div><span>Recording...</span></div>';
         }
 
         function updateUITranscribing() {
@@ -191,18 +177,10 @@
             stopIcon.classList.add('hidden');
             micIcon.classList.remove('hidden');
             recordButton.disabled = false;
-            recordButton.classList.remove('bg-red-600', 'hover:bg-red-700');
-            recordButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            recordButton.classList.replace('bg-red-600', 'bg-blue-600');
+            recordButton.classList.replace('hover:bg-red-700', 'hover:bg-blue-700');
             statusDiv.innerText = "Click the microphone to start recording";
         }
-
-        if (!SUPABASE_FUNCTION_URL || !SUPABASE_FUNCTION_URL.startsWith('http')) {
-            statusDiv.innerText = "Configuration needed: Please set your Supabase URL in the code.";
-            recordButton.disabled = true;
-        }
-
     </script>
-
 </body>
 </html>
-
